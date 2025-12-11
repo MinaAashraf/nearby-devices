@@ -1,0 +1,24 @@
+package com.example.myapplication3
+
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattCharacteristic
+
+enum class BleRole {
+    IDLE, CENTRAL, PERIPHERAL
+}
+
+// Discovered device data class
+data class DiscoveredDevice(
+    val name: String?,
+    val address: String,
+    val device: BluetoothDevice
+)
+
+// Connected device for Central role
+data class ConnectedDevice(
+    val device: BluetoothDevice,
+    val gatt: BluetoothGatt,
+    var writeCharacteristic: BluetoothGattCharacteristic? = null,
+    var readCharacteristic: BluetoothGattCharacteristic? = null
+)
