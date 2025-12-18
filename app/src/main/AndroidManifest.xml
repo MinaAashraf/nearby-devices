@@ -44,9 +44,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".CentralActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.MyApplication3">
 
+        </activity>
         <service
-            android:name=".BleConnectionsService"
+            android:name=".BlePeripheralService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />

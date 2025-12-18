@@ -11,7 +11,7 @@ enum class BleRole {
 // Discovered device data class
 data class DiscoveredDevice(
     val name: String?,
-    val address: String,
+    val msisdn: String,
     val device: BluetoothDevice
 )
 
