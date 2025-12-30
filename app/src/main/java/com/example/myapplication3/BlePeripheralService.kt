@@ -5,13 +5,19 @@ import android.annotation.SuppressLint
 import android.app.*
 import android.bluetooth.*
 import android.bluetooth.le.*
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Binder
 import android.os.Build
+import android.os.Environment
 import android.os.IBinder
 import android.os.ParcelUuid
+import android.provider.MediaStore
+import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -26,11 +32,12 @@ class BlePeripheralService : Service() {
     private val CHANNEL_ID = "ble_peripheral_channel"
 
     // BLE Constants
-    private val SERVICE_UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
-    private val CHARACTERISTIC_UUID_WRITE = UUID.fromString("00001102-0000-1000-8000-00805F9B34FB")
-    private val CHARACTERISTIC_UUID_NOTIFY = UUID.fromString("00001103-0000-1000-8000-00805F9B34FB")
-    private val CHARACTERISTIC_UUID_READ = UUID.fromString("00001104-0000-1000-8000-00805F9B34FB")
-    private val CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+    private val serviceUuid = UUID.fromString("bb21801d-a324-418f-abc7-f23d10e7d588")
+    private val characteristicUuidMsisdn = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db1")
+    private val characteristicUuidWrite = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db2")
+    private val characteristicUuidNotify = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db3")
+    private val characteristicUuidRead = UUID.fromString("00001104-0000-1000-8000-00805F9B34FB")
+    private val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     private val binder = LocalBinder()
 
@@ -48,6 +55,7 @@ class BlePeripheralService : Service() {
     private val connectedClientMap = ConcurrentHashMap<String, BluetoothDevice>()
 
     // Characteristics
+    private var bidirectionalCharacteristicServer: BluetoothGattCharacteristic? = null
     private var writeCharacteristicServer: BluetoothGattCharacteristic? = null
     private var notifyCharacteristicServer: BluetoothGattCharacteristic? = null
     private var readCharacteristicServer: BluetoothGattCharacteristic? = null
@@ -184,17 +192,14 @@ class BlePeripheralService : Service() {
             .build()
 
         val data = AdvertiseData.Builder()
-            .addServiceUuid(ParcelUuid(SERVICE_UUID)) // Only include service UUID to minimize size
+            .addServiceUuid(ParcelUuid(serviceUuid)) // Only include service UUID to minimize size
             .build()
-        val manufacturerId = 0x1234 // Your company ID
-        val msisdnBytes = "01033987862".toByteArray(Charsets.UTF_8)
 
         val scanResponse = AdvertiseData.Builder()
             .setIncludeDeviceName(true) // Put device name in scan response, not main advertising data
-            .addManufacturerData(manufacturerId, msisdnBytes) // Add MSISDN in manufacturer data
             .build()
 
-        log("📡 Starting BLE advertising with service UUID: $SERVICE_UUID")
+        log("📡 Starting BLE advertising with service UUID: $serviceUuid")
         updateNotification("Starting advertising...")
         advertiser?.startAdvertising(settings, data, scanResponse, advertiseCallback)
     }
@@ -229,39 +234,48 @@ class BlePeripheralService : Service() {
         }
         log("✓ GATT Server opened successfully")
 
-        log("🔧 Creating GATT Service with UUID: $SERVICE_UUID")
-        val service = BluetoothGattService(SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY)
+        log("🔧 Creating GATT Service with UUID: $serviceUuid")
+        val service = BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
 
-        log("📝 Creating Write Characteristic (UUID: $CHARACTERISTIC_UUID_WRITE)")
+        bidirectionalCharacteristicServer = BluetoothGattCharacteristic(
+            characteristicUuidMsisdn,
+            BluetoothGattCharacteristic.PROPERTY_READ or    // Can be read
+                    BluetoothGattCharacteristic.PROPERTY_WRITE,     // Can be written
+            BluetoothGattCharacteristic.PERMISSION_READ or  // Read permission
+                    BluetoothGattCharacteristic.PERMISSION_WRITE
+        )
+
+        log("📝 Creating Write Characteristic (UUID: $characteristicUuidWrite)")
         writeCharacteristicServer = BluetoothGattCharacteristic(
-            CHARACTERISTIC_UUID_WRITE,
+            characteristicUuidWrite,
             BluetoothGattCharacteristic.PROPERTY_WRITE or BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
             BluetoothGattCharacteristic.PERMISSION_WRITE
         )
 
-        log("📝 Creating Read Characteristic (UUID: $CHARACTERISTIC_UUID_READ)")
+        log("📝 Creating Read Characteristic (UUID: $characteristicUuidRead)")
         readCharacteristicServer = BluetoothGattCharacteristic(
-            CHARACTERISTIC_UUID_READ,
+            characteristicUuidRead,
             BluetoothGattCharacteristic.PROPERTY_READ,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
 
-        log("📝 Creating Notify Characteristic (UUID: $CHARACTERISTIC_UUID_NOTIFY)")
+        log("📝 Creating Notify Characteristic (UUID: $characteristicUuidNotify)")
         notifyCharacteristicServer = BluetoothGattCharacteristic(
-            CHARACTERISTIC_UUID_NOTIFY,
+            characteristicUuidNotify,
             BluetoothGattCharacteristic.PROPERTY_READ or BluetoothGattCharacteristic.PROPERTY_NOTIFY,
             BluetoothGattCharacteristic.PERMISSION_READ
         )
 
         log("📝 Adding CCCD descriptor to characteristics")
         val cccdDescriptor = BluetoothGattDescriptor(
-            CCCD_UUID,
+            cccdUuid,
             BluetoothGattDescriptor.PERMISSION_READ or BluetoothGattDescriptor.PERMISSION_WRITE
         )
         notifyCharacteristicServer?.addDescriptor(cccdDescriptor)
         readCharacteristicServer?.addDescriptor(cccdDescriptor)
 
         log("➕ Adding characteristics to service")
+        service.addCharacteristic(bidirectionalCharacteristicServer)
         service.addCharacteristic(writeCharacteristicServer)
         service.addCharacteristic(notifyCharacteristicServer)
         service.addCharacteristic(readCharacteristicServer)
@@ -290,6 +304,7 @@ class BlePeripheralService : Service() {
         gattServer = null
         writeCharacteristicServer = null
         notifyCharacteristicServer = null
+        bidirectionalCharacteristicServer = null
         connectedClientMap.clear()
         onClientsConnected?.invoke(emptyList())
         log("✓ GATT Server closed and cleaned up")
@@ -394,13 +409,22 @@ class BlePeripheralService : Service() {
             var responseValue: ByteArray? = null
             var responseStatus = BluetoothGatt.GATT_FAILURE
 
-            if (characteristic.uuid == CHARACTERISTIC_UUID_READ) {
-                val timestamp = System.currentTimeMillis()
-                responseValue = "Time: $timestamp".toByteArray(Charsets.UTF_8)
-                responseStatus = BluetoothGatt.GATT_SUCCESS
-                log("✓ Sending read response: Time: $timestamp")
-            } else {
-                log("⚠️ Unknown characteristic read request")
+            when (characteristic.uuid) {
+                characteristicUuidMsisdn -> {
+                    val msisdn = "01000000000"
+                    responseValue = msisdn.toByteArray(Charsets.UTF_8)
+                    responseStatus = BluetoothGatt.GATT_SUCCESS
+                    log("✓ Sending read response: MSISDN: $msisdn")
+                }
+                characteristicUuidRead -> {
+                    val timestamp = System.currentTimeMillis()
+                    responseValue = "Time: $timestamp".toByteArray(Charsets.UTF_8)
+                    responseStatus = BluetoothGatt.GATT_SUCCESS
+                    log("✓ Sending read response: Time: $timestamp")
+                }
+                else -> {
+                    log("⚠️ Unknown characteristic read request")
+                }
             }
 
             gattServer?.sendResponse(device, requestId, responseStatus, offset, responseValue)
@@ -425,17 +449,27 @@ class BlePeripheralService : Service() {
             log("⚙️ Response needed: $responseNeeded, Prepared write: $preparedWrite")
 
             var responseStatus = BluetoothGatt.GATT_FAILURE
-            if (characteristic.uuid == CHARACTERISTIC_UUID_WRITE || characteristic.uuid == CHARACTERISTIC_UUID_READ) {
-                val message = value?.toString(Charsets.UTF_8) ?: "null"
-                log("📨 MESSAGE RECEIVED from $deviceName: '$message'")
-                
-                // ✅ Notify UI about received message
-                onMessageReceived?.invoke(message, deviceName)
-                
-                responseStatus = BluetoothGatt.GATT_SUCCESS
-                log("✓ Message processed successfully")
-            } else {
-                log("⚠️ Unknown characteristic write request")
+            when (characteristic.uuid) {
+                characteristicUuidMsisdn -> {
+                    val msisdn = value?.toString(Charsets.UTF_8) ?: "null"
+                    log("📨 MSISDN RECEIVED from $deviceName: '$msisdn'")
+
+                    responseStatus = BluetoothGatt.GATT_SUCCESS
+                    log("✓ MSISDN processed successfully")
+                }
+                characteristicUuidWrite, characteristicUuidRead -> {
+                    val message = value?.toString(Charsets.UTF_8) ?: "null"
+                    log("📨 MESSAGE RECEIVED (${value?.size} bytes) from $deviceName: '$message'")
+
+                    // ✅ Notify UI about received message
+                    onMessageReceived?.invoke(message, deviceName)
+
+                    responseStatus = BluetoothGatt.GATT_SUCCESS
+                    log("✓ Message processed successfully")
+                }
+                else -> {
+                    log("⚠️ Unknown characteristic write request")
+                }
             }
 
             if (responseNeeded) {
@@ -459,7 +493,7 @@ class BlePeripheralService : Service() {
             log("📊 Descriptor UUID: ${descriptor.uuid}")
             
             var responseStatus = BluetoothGatt.GATT_FAILURE
-            if (descriptor.uuid == CCCD_UUID) {
+            if (descriptor.uuid == cccdUuid) {
                 responseStatus = BluetoothGatt.GATT_SUCCESS
                 when {
                     value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) -> {
@@ -499,5 +533,48 @@ class BlePeripheralService : Service() {
     private val imageChunks = mutableMapOf<Int, String>()
     private var expectedImageChunks = 0
     private var isReceivingImage = false
+
+    private fun handleReceivedImage(imageBytes: ByteArray) {
+        try {
+            val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+                ?: run {
+                    log("❌ Failed to decode image")
+                    return
+                }
+
+            val fileName = "BLE_IMG_${System.currentTimeMillis()}.jpg"
+
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/BleImages")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+
+            val resolver = applicationContext.contentResolver
+            val imageUri = resolver.insert(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            )
+
+            if (imageUri == null) {
+                log("❌ Failed to create MediaStore entry")
+                return
+            }
+
+            resolver.openOutputStream(imageUri)?.use { outputStream ->
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+            }
+
+            contentValues.clear()
+            contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(imageUri, contentValues, null, null)
+
+            log("✅ Image saved to gallery: $fileName")
+
+        } catch (e: Exception) {
+            log("❌ Error saving image: ${e.message}")
+        }
+    }
 
 }

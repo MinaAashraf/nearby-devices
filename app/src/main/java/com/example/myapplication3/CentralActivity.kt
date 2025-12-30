@@ -37,6 +37,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -47,9 +48,10 @@ class CentralActivity : ComponentActivity() {
     private val TAG = "CentralActivity"
 
     // BLE Constants
-    private val SERVICE_UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
-    private val CHARACTERISTIC_UUID_WRITE = UUID.fromString("00001102-0000-1000-8000-00805F9B34FB")
-    private val CHARACTERISTIC_UUID_NOTIFY = UUID.fromString("00001103-0000-1000-8000-00805F9B34FB")
+    private val SERVICE_UUID = UUID.fromString("bb21801d-a324-418f-abc7-f23d10e7d588")
+    private val CHARACTERISTIC_UUID_BIDIRECTIONAL =
+        UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db1")
+    private val CHARACTERISTIC_UUID_WRITE = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db2")
 
     // BLE Components
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -196,7 +198,11 @@ class CentralActivity : ComponentActivity() {
             )
 
             Spacer(modifier = Modifier.height(16.dp))
-
+            Button(
+                onClick = { pickImageFromGallery() }
+            ) {
+                Text("Send Image")
+            }
             // Logs
             LogDisplay(logMessages)
         }
@@ -224,7 +230,7 @@ class CentralActivity : ComponentActivity() {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        device.address?:"Unknown Address",
+                        device.address ?: "Unknown Address",
                         fontSize = 12.sp,
                         color = Color.Gray
                     )
@@ -329,11 +335,13 @@ class CentralActivity : ComponentActivity() {
     private fun log(message: String) {
         Log.d(TAG, message)
         val currentLogs = logMessages
-        logMessages = (listOf("${System.currentTimeMillis() % 10000}: $message") + currentLogs).take(100)
+        logMessages =
+            (listOf("${System.currentTimeMillis() % 10000}: $message") + currentLogs).take(100)
     }
 
     private fun hasPermission(permission: String): Boolean {
-        val granted = ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+        val granted =
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         if (!granted) {
             log("⚠️ Permission check failed: $permission")
         }
@@ -383,7 +391,11 @@ class CentralActivity : ComponentActivity() {
         bleScanner?.stopScan(scanCallback)
         isScanning = false
         log("✓ Scan stopped. Found ${discoveredDeviceMap.size} device(s)")
-        Toast.makeText(this, "Scan stopped. Found ${discoveredDeviceMap.size} devices", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            this,
+            "Scan stopped. Found ${discoveredDeviceMap.size} devices",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private val scanCallback = object : ScanCallback() {
@@ -392,7 +404,7 @@ class CentralActivity : ComponentActivity() {
             val deviceName = result.scanRecord?.deviceName ?: device.name ?: "Unknown"
 
             val msisdnBytes = result.scanRecord?.getManufacturerSpecificData(0x1234)
-                val msisdn = msisdnBytes?.let { String(msisdnBytes, Charsets.UTF_8)}?:"null"
+            val msisdn = msisdnBytes?.let { String(msisdnBytes, Charsets.UTF_8) } ?: "null"
 
             if (!discoveredDeviceMap.containsKey(msisdn)) {
                 log("📱 NEW DEVICE discovered: $deviceName ($msisdn)")
@@ -408,7 +420,7 @@ class CentralActivity : ComponentActivity() {
         }
 
         override fun onScanFailed(errorCode: Int) {
-            val errorMsg = when(errorCode) {
+            val errorMsg = when (errorCode) {
                 SCAN_FAILED_ALREADY_STARTED -> "Scan already started"
                 SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "App registration failed"
                 SCAN_FAILED_FEATURE_UNSUPPORTED -> "Feature unsupported"
@@ -451,7 +463,11 @@ class CentralActivity : ComponentActivity() {
         connectedGattClients[device.address] = ConnectedDevice(device = device, gatt = gatt)
         connectedDevices = connectedGattClients.values.toList()
         log("✓ GATT connection initiated, waiting for callback")
-        Toast.makeText(this, "Connecting to ${device.name ?: device.address}...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            this,
+            "Connecting to ${device.name ?: device.address}...",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun disconnectAll() {
@@ -481,10 +497,15 @@ class CentralActivity : ComponentActivity() {
                         log("✅ GATT CONNECTED to $deviceName ($deviceAddress)")
                         log("📊 Connection status: $status")
 
-                        connectedGattClients[deviceAddress] = ConnectedDevice(device = gatt.device, gatt = gatt)
+                        connectedGattClients[deviceAddress] =
+                            ConnectedDevice(device = gatt.device, gatt = gatt)
                         runOnUiThread {
                             connectedDevices = connectedGattClients.values.toList()
-                            Toast.makeText(this@CentralActivity, "Connected to $deviceName", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                this@CentralActivity,
+                                "Connected to $deviceName",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
 
                         log("🔍 Discovering GATT services...")
@@ -495,23 +516,34 @@ class CentralActivity : ComponentActivity() {
                         gatt.close()
                         runOnUiThread {
                             connectedDevices = connectedGattClients.values.toList()
-                            Toast.makeText(this@CentralActivity, "Connection failed", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                this@CentralActivity,
+                                "Connection failed",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 }
+
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     log("❌ GATT DISCONNECTED from $deviceName ($deviceAddress)")
                     connectedGattClients.remove(deviceAddress)
                     gatt.close()
                     runOnUiThread {
                         connectedDevices = connectedGattClients.values.toList()
-                        Toast.makeText(this@CentralActivity, "Disconnected from $deviceName", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            this@CentralActivity,
+                            "Disconnected from $deviceName",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                     log("📉 Total connected devices: ${connectedGattClients.size}")
                 }
+
                 BluetoothProfile.STATE_CONNECTING -> {
                     log("⏳ GATT CONNECTING to $deviceAddress...")
                 }
+
                 BluetoothProfile.STATE_DISCONNECTING -> {
                     log("⏳ GATT DISCONNECTING from $deviceAddress...")
                 }
@@ -530,6 +562,14 @@ class CentralActivity : ComponentActivity() {
                 val service = gatt.getService(SERVICE_UUID)
                 if (service != null) {
                     log("✓ Found target service: $SERVICE_UUID")
+
+                    val msisdnChar = service.getCharacteristic(CHARACTERISTIC_UUID_BIDIRECTIONAL)
+                    if (msisdnChar != null) {
+                        connectedGattClients[gatt.device.address]?.msisdnCharacteristic = msisdnChar
+                        sendMessage("01012345678", true)
+                    } else {
+                        log("⚠️ MSISDN characteristic not found")
+                    }
 
                     val writeChar = service.getCharacteristic(CHARACTERISTIC_UUID_WRITE)
                     if (writeChar != null) {
@@ -557,15 +597,34 @@ class CentralActivity : ComponentActivity() {
             val deviceAddress = gatt.device.address
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 log("✅ Message SENT successfully to $deviceAddress")
-                log("📝 Characteristic: ${characteristic.uuid}")
-                runOnUiThread {
-                    Toast.makeText(this@CentralActivity, "Message sent", Toast.LENGTH_SHORT).show()
-                }
+                val device = connectedGattClients[deviceAddress]
+                device?.gatt?.readCharacteristic(device.msisdnCharacteristic)
+                Log.d("BLE", "📥 READ request to peripheral")
             } else {
                 log("❌ Message SEND FAILED to $deviceAddress with status $status")
-                runOnUiThread {
-                    Toast.makeText(this@CentralActivity, "Send failed", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@CentralActivity, "Send failed", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                when (characteristic.uuid) {
+                    CHARACTERISTIC_UUID_BIDIRECTIONAL -> {
+                        val response = value.toString(Charsets.UTF_8)
+                        Log.d("BLE", "📨 READ response from peripheral: $response")
+                        connectedGattClients[gatt.device.address] =
+                            connectedGattClients[gatt.device.address]?.copy(msisdn = response)
+                                ?: connectedGattClients[gatt.device.address]!!
+                        connectedDevices = connectedGattClients.values.toList()
+                    }
                 }
+            } else {
+                Log.e("BLE", "❌ READ failed with status: $status")
             }
         }
 
@@ -574,13 +633,7 @@ class CentralActivity : ComponentActivity() {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            if (characteristic.uuid == CHARACTERISTIC_UUID_NOTIFY) {
-                val message = value.toString(Charsets.UTF_8)
-                log("📨 MESSAGE RECEIVED from ${gatt.device.address}: '$message'")
-                runOnUiThread {
-                    Toast.makeText(this@CentralActivity, "Received: $message", Toast.LENGTH_LONG).show()
-                }
-            }
+
         }
     }
 
@@ -588,7 +641,11 @@ class CentralActivity : ComponentActivity() {
     // SEND MESSAGE
     // ============================================
 
-    private fun sendMessage(message: String) {
+    private fun sendMessage(
+        message: String,
+        isMsisdnMessage: Boolean = false,
+        msisdns: List<String>? = null
+    ) {
         log("📤 sendMessage() - Preparing to send message: '$message'")
 
         if (connectedGattClients.isEmpty()) {
@@ -601,23 +658,35 @@ class CentralActivity : ComponentActivity() {
         val data = message.toByteArray(Charsets.UTF_8)
         log("📊 Message size: ${data.size} bytes")
 
-        connectedGattClients.entries.forEachIndexed { index, (address, connectedDevice) ->
-            log("📤 Sending to device ${index + 1}: $address")
+        val connectedDevice = if (msisdns != null) {
+            connectedGattClients.values.filter { it.msisdn in msisdns }
+        } else {
+            connectedGattClients.values
+        }
 
+        connectedDevice.forEach { connectedDevice ->
+            val msisdnChar = connectedDevice.msisdnCharacteristic
             val writeChar = connectedDevice.writeCharacteristic
-            if (writeChar != null) {
+            if (msisdnChar != null && isMsisdnMessage) {
+                log("🆔 Writing MSISDN to characteristic: $message")
+                msisdnChar.value = data
+                msisdnChar.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                connectedDevice.gatt.writeCharacteristic(msisdnChar)
+                log("✓ MSISDN write operation queued for ${connectedDevice.msisdn}")
+            } else if (writeChar != null) {
                 writeChar.value = data
-                writeChar.writeType = if (writeChar.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) {
-                    log("⚙️ Using WRITE_TYPE_NO_RESPONSE")
-                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                } else {
-                    log("⚙️ Using WRITE_TYPE_DEFAULT")
-                    BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
-                }
+                writeChar.writeType =
+                    if (writeChar.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) {
+                        log("⚙️ Using WRITE_TYPE_NO_RESPONSE")
+                        BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                    } else {
+                        log("⚙️ Using WRITE_TYPE_DEFAULT")
+                        BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    }
                 connectedDevice.gatt.writeCharacteristic(writeChar)
-                log("✓ Write operation queued for $address")
+                log("✓ Write operation queued for ${connectedDevice.msisdn}")
             } else {
-                log("❌ Write characteristic not found for $address")
+                log("❌ Write characteristic not found for ${connectedDevice.msisdn}")
             }
         }
     }
@@ -662,9 +731,10 @@ class CentralActivity : ComponentActivity() {
     private fun chunkString(data: String): List<String> {
         return data.chunked(IMAGE_CHUNK_SIZE)
     }
+
     private val bleScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    companion object{
+    companion object {
         private const val IMAGE_CHUNK_SIZE = 180
     }
 }

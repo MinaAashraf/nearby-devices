@@ -32,7 +32,9 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this@MainActivity, "Service connected", Toast.LENGTH_SHORT).show()
             bleService?.onMessageReceived = { message, fromDevice ->
                 Log.d(TAG, "Message received from central: $fromDevice")
-                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                }
             }
         }
 
@@ -96,6 +98,10 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+
         return permissions.toTypedArray()
     }
 
