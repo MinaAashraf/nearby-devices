@@ -26,7 +26,7 @@ class MainActivity : ComponentActivity() {
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             Log.d(TAG, "Service connected")
-            val binder = service as BlePeripheralService.LocalBinder
+            val binder = service as BlePeripheralService.LocalBgitinder
             bleService = binder.getService()
             serviceBound = true
             Toast.makeText(this@MainActivity, "Service connected", Toast.LENGTH_SHORT).show()
