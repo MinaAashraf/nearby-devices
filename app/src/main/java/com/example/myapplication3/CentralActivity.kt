@@ -33,25 +33,20 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.myapplication3.UUIDs.characteristicUuidBidirectional
+import com.example.myapplication3.UUIDs.characteristicUuidWrite
+import com.example.myapplication3.UUIDs.serviceUuid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("MissingPermission")
 class CentralActivity : ComponentActivity() {
 
     private val TAG = "CentralActivity"
-
-    // BLE Constants
-    private val SERVICE_UUID = UUID.fromString("bb21801d-a324-418f-abc7-f23d10e7d588")
-    private val CHARACTERISTIC_UUID_BIDIRECTIONAL =
-        UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db1")
-    private val CHARACTERISTIC_UUID_WRITE = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db2")
 
     // BLE Components
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -365,9 +360,9 @@ class CentralActivity : ComponentActivity() {
         discoveredDeviceMap.clear()
         discoveredDevices = emptyList()
 
-        log("⚙️ Creating scan filter for service UUID: $SERVICE_UUID")
+        log("⚙️ Creating scan filter for service UUID: $serviceUuid")
         val scanFilter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(SERVICE_UUID))
+            .setServiceUuid(ParcelUuid(serviceUuid))
             .build()
 
         val scanSettings = ScanSettings.Builder()
@@ -559,11 +554,11 @@ class CentralActivity : ComponentActivity() {
                 log("✓ Services discovered successfully")
                 log("📋 Total services: ${gatt.services.size}")
 
-                val service = gatt.getService(SERVICE_UUID)
+                val service = gatt.getService(serviceUuid)
                 if (service != null) {
-                    log("✓ Found target service: $SERVICE_UUID")
+                    log("✓ Found target service: $serviceUuid")
 
-                    val msisdnChar = service.getCharacteristic(CHARACTERISTIC_UUID_BIDIRECTIONAL)
+                    val msisdnChar = service.getCharacteristic(characteristicUuidBidirectional)
                     if (msisdnChar != null) {
                         connectedGattClients[gatt.device.address]?.msisdnCharacteristic = msisdnChar
                         sendMessage("01012345678", true)
@@ -571,9 +566,9 @@ class CentralActivity : ComponentActivity() {
                         log("⚠️ MSISDN characteristic not found")
                     }
 
-                    val writeChar = service.getCharacteristic(CHARACTERISTIC_UUID_WRITE)
+                    val writeChar = service.getCharacteristic(characteristicUuidWrite)
                     if (writeChar != null) {
-                        log("✓ Found write characteristic: $CHARACTERISTIC_UUID_WRITE")
+                        log("✓ Found write characteristic: $characteristicUuidWrite")
                         log("📝 Write properties: ${writeChar.properties}")
                         connectedGattClients[gatt.device.address]?.writeCharacteristic = writeChar
                         log("✅ Device $deviceAddress is ready for communication")
@@ -581,7 +576,7 @@ class CentralActivity : ComponentActivity() {
                         log("⚠️ Write characteristic not found")
                     }
                 } else {
-                    log("⚠️ Target service $SERVICE_UUID not found")
+                    log("⚠️ Target service $serviceUuid not found")
                     log("📋 Available services: ${gatt.services.map { it.uuid }}")
                 }
             } else {
@@ -614,7 +609,7 @@ class CentralActivity : ComponentActivity() {
         ) {
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 when (characteristic.uuid) {
-                    CHARACTERISTIC_UUID_BIDIRECTIONAL -> {
+                    characteristicUuidBidirectional -> {
                         val response = value.toString(Charsets.UTF_8)
                         Log.d("BLE", "📨 READ response from peripheral: $response")
                         connectedGattClients[gatt.device.address] =

@@ -17,11 +17,15 @@ import android.os.Environment
 import android.os.IBinder
 import android.os.ParcelUuid
 import android.provider.MediaStore
-import android.util.Base64
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import java.util.UUID
+import com.example.myapplication3.UUIDs.cccdUuid
+import com.example.myapplication3.UUIDs.characteristicUuidBidirectional
+import com.example.myapplication3.UUIDs.characteristicUuidNotify
+import com.example.myapplication3.UUIDs.characteristicUuidRead
+import com.example.myapplication3.UUIDs.characteristicUuidWrite
+import com.example.myapplication3.UUIDs.serviceUuid
 import java.util.concurrent.ConcurrentHashMap
 
 @SuppressLint("MissingPermission")
@@ -31,13 +35,6 @@ class BlePeripheralService : Service() {
     private val NOTIFICATION_ID = 2001
     private val CHANNEL_ID = "ble_peripheral_channel"
 
-    // BLE Constants
-    private val serviceUuid = UUID.fromString("bb21801d-a324-418f-abc7-f23d10e7d588")
-    private val characteristicUuidMsisdn = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db1")
-    private val characteristicUuidWrite = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db2")
-    private val characteristicUuidNotify = UUID.fromString("b6a0912e-e715-438b-96a2-b21149015db3")
-    private val characteristicUuidRead = UUID.fromString("00001104-0000-1000-8000-00805F9B34FB")
-    private val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     private val binder = LocalBinder()
 
@@ -238,7 +235,7 @@ class BlePeripheralService : Service() {
         val service = BluetoothGattService(serviceUuid, BluetoothGattService.SERVICE_TYPE_PRIMARY)
 
         bidirectionalCharacteristicServer = BluetoothGattCharacteristic(
-            characteristicUuidMsisdn,
+            characteristicUuidBidirectional,
             BluetoothGattCharacteristic.PROPERTY_READ or    // Can be read
                     BluetoothGattCharacteristic.PROPERTY_WRITE,     // Can be written
             BluetoothGattCharacteristic.PERMISSION_READ or  // Read permission
@@ -410,7 +407,7 @@ class BlePeripheralService : Service() {
             var responseStatus = BluetoothGatt.GATT_FAILURE
 
             when (characteristic.uuid) {
-                characteristicUuidMsisdn -> {
+                characteristicUuidBidirectional -> {
                     val msisdn = "01000000000"
                     responseValue = msisdn.toByteArray(Charsets.UTF_8)
                     responseStatus = BluetoothGatt.GATT_SUCCESS
@@ -450,7 +447,7 @@ class BlePeripheralService : Service() {
 
             var responseStatus = BluetoothGatt.GATT_FAILURE
             when (characteristic.uuid) {
-                characteristicUuidMsisdn -> {
+                characteristicUuidBidirectional -> {
                     val msisdn = value?.toString(Charsets.UTF_8) ?: "null"
                     log("📨 MSISDN RECEIVED from $deviceName: '$msisdn'")
 
